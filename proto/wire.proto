@@ -1,0 +1,127 @@
+// Copyright 2021 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+syntax = "proto3";
+
+package topo;
+
+option go_package = "github.com/google/kne/proto/wire";
+
+
+// Build with protoc -I=proto --go_out=proto/wire proto/wire.proto
+
+
+// WireServer provides the data wire between two pods.
+// A seperate wirestream is created for each
+// a_pod:a_interface<->z_pod:z_interface combination.
+// the A pod is defined as the lowest lexographic key of pod:interface.
+// The lower pod key will provide the server side of the connection.
+// The protocol exchange is the following:
+// Topology is deployed to k8s cluster.
+// CRD is parsed by Controller.
+// Each node / interface is registered by the controller with
+// the WireControl Service.
+//    Server                             Client
+//                              <----    Connect
+//                         <---------    Register
+//    Peer      --------->
+//                         <---------    Status
+//    PeerStatus--------->
+//    Heartbeat ---------><----------    Heartbeat
+//    PeerClose ---------><----------    Close
+// When the CNI is called for a new pod.  The CNI will connect to the
+// WireControl Service and determine if the pod is a "topology based pod".
+// If not CNI will chain call the remaining Plugins and return.
+// For Topology pods:
+// The CNI will then create veth's from the pod to the node namespace.
+// The WireServer of the "lower pod" will wait for the z pod to connect
+//     A Pod                             Z Pod
+//                              <----    Connect
+//                         <---------    Register
+//     Register  -------->    
+//                         <---------    Status
+//     Status    --------> 
+//     Data      --------><----------    Data
+//     Heartbeat --------><----------    Heartbeat
+// Then connect the node veth to WireServer stream.
+// If status goes down on either side the underlying veth
+// must be transitioned to down to notify the pod. 
+service WireServer {
+  rpc Stream(stream WireStream) returns (stream WireStream); 
+}
+
+service WireControl {
+  rpc Register(stream RegisterClientStream) 
+  returns (stream RegisterServerStream);
+}
+
+message WireStream {
+  oneof message {
+    Data data = 1;
+    Control control = 2;
+  }
+}
+
+enum ControlStatus {
+  UNKNOWN = 0;
+  UP      = 1;
+  DOWN    = 2;
+  ERROR   = 3;
+}
+
+message Heartbeat {
+  string message = 1;
+  int64 timestamp = 2;
+}
+
+message Control {
+  oneof message {
+    Register register = 1;
+    ControlStatus status = 2;
+    Heartbeat heartbeat = 3;
+  }
+}
+
+// Data is single frame of data sent over the stream.
+message Data {
+  // raw is a raw data frame transported in the stream.
+  repeated bytes raw = 1;
+}
+
+message RegisterClientStream {
+  oneof message {
+    Register register = 1;
+    string close = 2;
+    bool synced = 3;
+    ControlStatus status = 4;
+    Heartbeat heartbeat = 5;
+  }
+}
+
+message Register {
+  string a_node = 1;
+  string a_port = 2;
+  string z_node = 3;
+  string z_port = 4;
+  uint32 mtu = 5;
+}
+
+message RegisterServerStream {
+  oneof message {
+    Register peer = 1;
+    string close = 2;
+    bool synced = 3;
+    ControlStatus status = 4;
+    Heartbeat heartbeat = 5;
+  }
+}
