@@ -44,7 +44,7 @@ require (
 	github.com/containerd/containerd v1.5.9 // indirect
 	github.com/containernetworking/plugins v0.9.1 // indirect
 	github.com/creack/pty v1.1.11 // indirect
-	github.com/docker/distribution v2.7.1+incompatible // indirect
+	github.com/docker/distribution v2.8.2+incompatible // indirect
 	github.com/docker/go-connections v0.4.0 // indirect
 	github.com/docker/go-units v0.4.0 // indirect
 	github.com/evanphx/json-patch v4.11.0+incompatible // indirect
